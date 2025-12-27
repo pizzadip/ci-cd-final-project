@@ -1,0 +1,24 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: buildah
+spec:
+  params:
+    - name: IMAGE
+      type: string
+      description: Image to build and push
+  workspaces:
+    - name: source
+  steps:
+    - name: build-and-push
+      image: quay.io/buildah/stable:v1
+      securityContext:
+        privileged: true
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/usr/bin/env bash
+        set -e
+        echo "Building image: $(params.IMAGE)"
+        buildah bud --storage-driver=overlay -f ./Dockerfile -t $(params.IMAGE) .
+        echo "Pushing image..."
+        buildah push --tls-verify=false $(params.IMAGE)

@@ -1,0 +1,77 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: ci-cd-final-pipeline
+spec:
+  workspaces:
+    - name: output
+
+  tasks:
+    - name: cleanup
+      taskRef:
+        name: cleanup
+      workspaces:
+        - name: source
+          workspace: output
+
+    - name: git-clone
+      runAfter: [cleanup]
+      taskRef:
+        kind: ClusterTask
+        name: git-clone
+      params:
+        - name: url
+          value: https://github.com/pizzadip/ci-cd-final-project.git
+        - name: revision
+          value: ""
+        - name: refspec
+          value: ""
+        - name: submodules
+          value: "true"
+      workspaces:
+        - name: output
+          workspace: output
+
+    - name: flake8-lint
+      runAfter: [git-clone]
+      taskRef:
+        name: flake8-lint
+      workspaces:
+        - name: source
+          workspace: output
+
+    - name: nose
+      runAfter: [flake8-lint]
+      taskRef:
+        name: nose
+      workspaces:
+        - name: source
+          workspace: output
+
+    - name: buildah
+      runAfter: [nose]
+      taskRef:
+        kind: ClusterTask
+        name: buildah
+      params:
+        - name: IMAGE
+          value: image-registry.openshift-image-registry.svc:5000/sn-labs-weekendemail/ci-cd-final-project:latest
+        - name: DOCKERFILE
+          value: ./Dockerfile
+        - name: CONTEXT
+          value: .
+      workspaces:
+        - name: source
+          workspace: output
+
+  finally:
+    - name: deploy
+      taskRef:
+        kind: ClusterTask
+        name: openshift-client
+      params:
+        - name: SCRIPT
+          value: |
+            oc create deployment ci-cd-final-project \
+              --image=image-registry.openshift-image-registry.svc:5000/sn-labs-weekendemail/ci-cd-final-project:latest \
+              --dry-run=client -o yaml | oc apply -f -
